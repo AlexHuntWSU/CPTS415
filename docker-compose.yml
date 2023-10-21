@@ -6,4 +6,6 @@ services:
       - "7687:7687"
       - "7474:7474"
     volumes:
-      - $HOME/neo4j/data:/data
+      - .:/var/lib/neo4j/import
+
+# neo4j/'password'
