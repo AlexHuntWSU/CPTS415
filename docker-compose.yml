@@ -15,7 +15,7 @@ services:
     ports:
       - 27017:27017
   spark-master:
-    image: bitnami/spark:3
+    image: bitnami/spark:3.4.1
     container_name: spark-master
     environment:
       - SPARK_MODE=master
@@ -26,7 +26,7 @@ services:
       - "7077:7077"
 
   spark-worker-1:
-    image: bitnami/spark:3
+    image: bitnami/spark:3.4.1
     container_name: spark-worker-1
     environment:
       - SPARK_MODE=worker
@@ -34,14 +34,14 @@ services:
       - SPARK_NO_DAEMONIZE=yes
 
   spark-worker-2:
-    image: bitnami/spark:3
+    image: bitnami/spark:3.4.1
     container_name: spark-worker-2
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_NO_DAEMONIZE=yes
   pyspark:
-    image: jupyter/pyspark-notebook
+    image: jupyter/pyspark-notebook:spark-3.4.1
     ports:
       - "8888:8888"
     volumes:
@@ -49,8 +49,33 @@ services:
     environment:
       - SPARK_OPTS=--master=spark://spark-master:7077
       - PYSPARK_DRIVER_PYTHON_OPTS=notebook
+  zookeeper:
+    image: debezium/zookeeper
+    ports:
+      - "2181:2181"
+      - "2888:2888"
+      - "3888:3888"
+  
+  kafka:
+    image: debezium/kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+      - "9092:9092"
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=LISTENER_EXT://localhost:29092,LISTENER_INT://kafka:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=LISTENER_INT:PLAINTEXT,LISTENER_EXT:PLAINTEXT
+      - KAFKA_LISTENERS=LISTENER_INT://0.0.0.0:9092,LISTENER_EXT://0.0.0.0:29092
+      - KAFKA_INTER_BROKER_LISTENER_NAME=LISTENER_INT
 
 # neo4j/'password'
 #docker exec -it cpts415-mongodb-1 mongosh -u "root" -p "password"
 #use mongo
 #db.createCollection('paths')
+
+# kafka commands
+# docker exec -it cpts415-kafka-1 /kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic test
+# docker exec -it cpts415-kafka-1 /kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test
+# docker exec -it cpts415-kafka-1 /kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test

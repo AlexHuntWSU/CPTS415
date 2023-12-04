@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+
+    <title>OpenStreetMap Routing With Neo4j</title>
+
+    <!-- TODO: add favicon -->
+    <link
+      rel="shortcut icon"
+      type="image/x-icon"
+      href="docs/images/favicon.ico"
+    />
+
+    <!-- CSS for leaflet and leaflet-geoman plugin -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.2/dist/leaflet.css"
+      integrity="sha256-sA+zWATbFveLLNqWO2gtiw3HL/lh1giY/Inf1BJ0z14="
+      crossorigin=""
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css"
+    />
+
+    <!-- Load JavaScript for leaflet, leaflet-geoman plugin, turf.js, and neo4j-driver -->
+    <script
+      src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js"
+      integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg="
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/neo4j-driver"></script>
+
+    <!-- Fixed size map area -->
+    <style>
+      html,
+      body {
+        height: 95%;
+        margin: 0;
+      }
+      #btnCreateLine {
+        margin-top: 10px;
+      }
+      #btnShowCentrality {
+        margin-top: 10px;
+        margin-right: 10px;
+      }
+      /* .leaflet-container {
+        width: 1000px;
+        height: 1000px;
+      } */
+    </style>
+  </head>
+  <body>
+    <!-- Fixed size map area -->
+    <div id="map" style="width: 100%; height: 100%"></div>
+    <button id="btnCreateLine">Create Line</button>
+    <button id="btnShowCentrality">Show Centrality</button>
+    <!-- TODO: move this into it's own JavaScript file -->
+    <!-- TODO: read credentials from env vars -->
+    <script>
+
+      const map = L.map('map').setView([46.7298, -117.1817], 14);
+
+      const tiles = L.tileLayer(
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+          maxZoom: 19,
+          attribution:
+            '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        }
+      ).addTo(map);
+  
+      let clickCount = 0;
+      let markers = [];
+      let polyline;
+
+      map.on('click', (e) => {
+        clickCount++;
+
+        // Clear existing markers and polyline on the third click
+        if (clickCount === 3) {
+          clearMarkers();
+          clickCount = 1; // Reset click count for the new set of markers
+        }
+
+        // Drop markers on the first and second clicks
+        const marker = L.marker(e.latlng).addTo(map);
+        markers.push(marker);
+
+      });
+
+      // UI button click event
+      const btnCreateLine = document.getElementById('btnCreateLine');
+      btnCreateLine.addEventListener('click', () => {
+        // Check if there are two markers to create a line
+        if (markers.length === 2) {
+          const latitude1 = markers[0].getLatLng().lat;
+          const longitude1 = markers[0].getLatLng().lng;
+          const latitude2 = markers[1].getLatLng().lat;
+          const longitude2 = markers[1].getLatLng().lng;
+
+          // Create a list of markers
+          const markersList = [
+              { lat: latitude1, lon: longitude1 },
+              { lat: latitude2, lon: longitude2 }
+          ];
+
+          // Create a message payload with the list of markers
+          const message = {
+              markers: markersList,
+          };
+
+          sendKafkaRequest(markers.map(marker => marker.getLatLng()))
+
+          if (polyline) {
+            map.removeLayer(polyline);
+          }
+          polyline = L.polyline([markers[0].getLatLng(), markers[1].getLatLng()], { color: 'red' }).addTo(map);
+        } else {
+          alert('Please create two markers first.');
+        }
+      });
+
+      function clearMarkers() {
+        markers.forEach(marker => map.removeLayer(marker));
+        markers = [];
+        if (polyline) {
+          map.removeLayer(polyline);
+          polyline = null;
+        }
+      }
+      const sendKafkaRequest = (markersList) => {
+
+          // Create a message payload with the list of markers
+          const message = {
+              markers: markersList,
+          };
+
+          // Make an HTTP POST request to your Node.js server (app.js)
+          fetch('http://localhost:3000/send-kafka', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(message),
+          })
+          .then(response => {
+              if (response.ok) {
+                  console.log('HTTP Request to Node.js server successful.');
+              } else {
+                  console.error('HTTP Request to Node.js server failed.');
+              }
+          })
+          .catch(error => {
+              console.error('Error sending HTTP Request:', error);
+          });
+      };
+
+    </script>
+  </body>
+</html>
