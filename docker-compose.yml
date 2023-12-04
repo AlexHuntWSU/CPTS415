@@ -49,6 +49,7 @@ services:
     environment:
       - SPARK_OPTS=--master=spark://spark-master:7077
       - PYSPARK_DRIVER_PYTHON_OPTS=notebook
+    command: "start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''" #Don't have to find the token in the logs
   zookeeper:
     image: debezium/zookeeper
     ports:
