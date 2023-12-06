@@ -41,7 +41,7 @@ async function getNodesFromNeo4j(marker) {
       ORDER BY point.distance(
         point({ longitude: n.lon, latitude: n.lat }),
         point({ longitude: $lng, latitude: $lat })
-      ) ASC
+      )
       LIMIT 1
     `, {
       lng: marker.lng,
@@ -105,7 +105,7 @@ app.post('/getroute', async (req, res) => {
         .then(result => {
             if (result !== null) {
             console.log('Route found:', result);
-            //return res.status(200).json({ message: result.path });
+            return res.status(200).json({ message: result.path });
             } else {
             console.log('Route does not exist.');
             const produce = producemessage(Result)
