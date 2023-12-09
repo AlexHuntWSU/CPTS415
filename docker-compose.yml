@@ -5,10 +5,12 @@ services:
     ports:
       - "7687:7687"
       - "7474:7474"
-    # volumes:
-    #   - .:/var/lib/neo4j/import
+    volumes:
+      - neo4j_data:/data
   mongodb:
     image: mongo:latest
+    volumes:
+      - mongodb_data:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
@@ -71,6 +73,9 @@ services:
       - KAFKA_LISTENERS=LISTENER_INT://0.0.0.0:9092,LISTENER_EXT://0.0.0.0:29092
       - KAFKA_INTER_BROKER_LISTENER_NAME=LISTENER_INT
 
+volumes:
+  mongodb_data:
+  neo4j_data:
 # neo4j/'password'
 #docker exec -it cpts415-mongodb-1 mongosh -u "root" -p "password"
 #use mongo

@@ -65,7 +65,8 @@ def upload_edges(df_edges, batch_size=100):
 
 ############## Process Data ###################
 
-G = ox.graph_from_place("Washington State", network_type="drive")
+#G = ox.graph_from_place("Washington State", network_type="drive")
+G = ox.graph_from_place("Whitman, WA", network_type="drive")
 
 df_nodes, df_edges = ox.graph_to_gdfs(G)
 df_nodes.reset_index(inplace=True)
@@ -79,6 +80,7 @@ df = df_edges[['highway_updated','maxspeed_updated']].dropna().astype({'maxspeed
 speed_map = df.to_dict()['maxspeed_updated']
 
 df_edges['maxspeed_updated'] = df_edges['maxspeed_updated'].fillna(df_edges['highway_updated'].map(speed_map))
+df_edges['weighted_distance'] = df_edges.apply(lambda row: weighted_distance(row['length'], row['maxspeed_updated']), axis=1)
 df_edges['road'] = df_edges.apply(lambda row: convert_linestring(row['geometry']), axis=1)
 df_edges = df_edges[['u', 'v', 'oneway', 'weighted_distance', 'road']]
 

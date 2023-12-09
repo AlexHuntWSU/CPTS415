@@ -10,14 +10,12 @@
 
     <title>OpenStreetMap Routing With Neo4j</title>
 
-    <!-- TODO: add favicon -->
     <link
       rel="shortcut icon"
       type="image/x-icon"
       href="docs/images/favicon.ico"
     />
 
-    <!-- CSS for leaflet and leaflet-geoman plugin -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.2/dist/leaflet.css"
@@ -29,7 +27,6 @@
       href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css"
     />
 
-    <!-- Load JavaScript for leaflet, leaflet-geoman plugin, turf.js, and neo4j-driver -->
     <script
       src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js"
       integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg="
@@ -39,7 +36,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     <script src="https://unpkg.com/neo4j-driver"></script>
 
-    <!-- Fixed size map area -->
     <style>
       html,
       body {
@@ -53,6 +49,10 @@
         margin-top: 10px;
         margin-right: 10px;
       }
+      #btnClearMap {
+        margin-top: 10px;
+        margin-right: 10px;
+      }
       /* .leaflet-container {
         width: 1000px;
         height: 1000px;
@@ -60,12 +60,10 @@
     </style>
   </head>
   <body>
-    <!-- Fixed size map area -->
     <div id="map" style="width: 100%; height: 100%"></div>
     <button id="btnCreateLine">Create Line</button>
     <button id="btnShowCentrality">Show Centrality</button>
-    <!-- TODO: move this into it's own JavaScript file -->
-    <!-- TODO: read credentials from env vars -->
+    <button id="btnClearMap">Clear Map</button>
     <script>
       
       const map = L.map('map').setView([46.7298, -117.1817], 14);
@@ -83,8 +81,85 @@
       let markers = [];
       let polyline;
 
+      function parseCoordinates(roadString) {
+        const coordinates = roadString.match(/\(([^,]+),\s*([^)]+)\)/g).map(coord => {
+          const [longitude, latitude] = coord.match(/[-.\d]+/g);
+          return [parseFloat(latitude), parseFloat(longitude)];
+        });
+        return coordinates;
+      }
+
+      function calculateQuartile(values) {
+        const length = values.length;
+        const mid = Math.floor(length / 2);
+        return length % 2 === 0 ? (values[mid - 1] + values[mid]) / 2 : values[mid];
+}
+
+      const get_centrality = (message) => {
+        fetch('http://localhost:3000/getcentrality', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(message),
+      }).then(response => {
+              if (response.ok) {
+                return response.json();
+              } else {
+                console.error(`Error: ${response.status} - ${response.statusText}`);
+                return Promise.reject('Error fetching centrality');
+              }
+            })
+            .then(data => {
+              const edges = data.message;
+              console.log('Edges:', edges);
+              const centralityValues = edges.map(edge => edge.centrality);
+              const average = centralityValues.reduce((acc, val) => acc + val, 0) / centralityValues.length;
+              const sortedValues = centralityValues.sort((a, b) => a - b);
+              const n = sortedValues.length;
+              const q3 = n % 2 === 0 ? sortedValues.slice(n / 2) : sortedValues.slice(Math.ceil(n / 2));
+              const min = Math.min(...edges.map(edge => edge.centrality));
+              const max = Math.max(...edges.map(edge => edge.centrality));
+              //const middle = (min + max) / 2;
+              edges.forEach(edge => {
+                const Road = parseCoordinates(edge.road);
+                console.log(Road)
+                const color = getColor(edge.centrality, calculateQuartile(q3), max);
+                console.log(color)
+                if (color !== null) {
+                    const lines = L.polyline(Road, { color }).addTo(map);
+                }
+                // const lines = L.polyline(Road, { color }).addTo(map);
+              });
+            })
+            .catch(error => console.error('Error:', error));
+      };
       // var line = L.polyline(coordinates, { color: 'blue' }).addTo(map)
       // var line2 = L.polyline(coords, { color: 'red' }).addTo(map)
+
+      function getColor(perc,min,max) {
+            if (perc < min){
+              return null;
+            }
+            var base = (max - min);
+
+            if (base == 0) { perc = 100; }
+            else {
+                perc = (perc - min) / base * 100; 
+            }
+
+            var r, g, b = 0;
+            if (perc > 50) {
+                r = 255;
+                b = Math.round(255 * (perc / 100));
+            } else {
+                b = 255;
+                r = Math.round(255 * (perc / 100));
+            }
+            // var h = r * 0x10000 + g * 0x1 + b * 0x100;
+            // return '#' + ('000000' + h.toString(16)).slice(-6);
+            return "rgb("+r+",0,"+b+")";
+        }
 
       map.on('click', (e) => {
         clickCount++;
@@ -101,23 +176,40 @@
 
       });
 
-      // UI button click event
+      const btnShowCentrality = document.getElementById('btnShowCentrality');
+      btnShowCentrality.addEventListener('click', () => {
+        clearMap()
+        const bounds = map.getBounds();
+        const data = {
+          bounds: {
+            northEast: {
+              lat: bounds._northEast.lat,
+              lng: bounds._northEast.lng
+            },
+            southWest: {
+              lat: bounds._southWest.lat,
+              lng: bounds._southWest.lng
+            }
+          }
+        };
+
+        get_centrality(data)
+
+      });
+
       const btnCreateLine = document.getElementById('btnCreateLine');
       btnCreateLine.addEventListener('click', () => {
-        // Check if there are two markers to create a line
         if (markers.length === 2) {
           const latitude1 = markers[0].getLatLng().lat;
           const longitude1 = markers[0].getLatLng().lng;
           const latitude2 = markers[1].getLatLng().lat;
           const longitude2 = markers[1].getLatLng().lng;
 
-          // Create a list of markers
           const markersList = [
               { lat: latitude1, lon: longitude1 },
               { lat: latitude2, lon: longitude2 }
           ];
 
-          // Create a message payload with the list of markers
           const message = {
               markers: markersList,
           };
@@ -133,6 +225,10 @@
         }
       });
 
+      const btnClearMap = document.getElementById('btnClearMap');
+      btnClearMap.addEventListener('click', () => {
+        clearMap()
+      })
       function clearMarkers() {
         markers.forEach(marker => map.removeLayer(marker));
         markers = [];
@@ -141,14 +237,21 @@
           polyline = null;
         }
       }
+
+      function clearMap() {
+        map.eachLayer(layer => {
+          if (layer instanceof L.Polyline) {
+            map.removeLayer(layer);
+          }
+        });
+      }
+
       const sendKafkaRequest = (markersList) => {
 
-          // Create a message payload with the list of markers
           const message = {
               markers: markersList,
           };
 
-          // Make an HTTP POST request to your Node.js server (app.js)
           fetch('http://localhost:3000/getroute', {
               method: 'POST',
               headers: {
@@ -167,7 +270,6 @@
             .then(data => {
               const routeValue = data.message;
               console.log('Route Value:', routeValue);
-              // Use the value in your application logic
               polyline = L.polyline(routeValue, { color: 'blue' }).addTo(map)
             })
             .catch(error => console.error('Error:', error));

@@ -30,6 +30,38 @@ async function connectToKafka() {
     console.log('Connected to Kafka');
 };
 
+async function getCentralityFromNeo4j(bounds){
+  const session = driver.session()
+  const result = await session.run(
+    `
+    MATCH (start)-[edge]->(end)
+    WHERE start.lat >= $minLat AND start.lat <= $maxLat
+      AND start.lon >= $minLon AND start.lon <= $maxLon
+      AND end.lat >= $minLat AND end.lat <= $maxLat
+      AND end.lon >= $minLon AND end.lon <= $maxLon
+      AND edge.centrality IS NOT NULL
+    RETURN edge
+    `,
+    {
+      minLat: bounds.southWest.lat,
+      maxLat: bounds.northEast.lat,
+      minLon: bounds.southWest.lng,
+      maxLon: bounds.northEast.lng,
+    }
+  );
+
+  const edges = result.records.map(record => {
+    const edge = record.get('edge').properties;
+    return {
+      centrality: edge.centrality,
+      road: edge.road
+  }});
+
+  //console.log(edges);
+  session.close();
+  return edges;
+}
+
 async function getNodesFromNeo4j(marker) {
     const session = driver.session()
 
@@ -50,6 +82,7 @@ async function getNodesFromNeo4j(marker) {
   
     // Extract the Neo4j result
     const neo4jResult = result.records[0].get(0).toInt();
+    //console.log(result.records[0])
     // console.log(result.records[0].get(0).toInt());
   
     session.close();
@@ -78,7 +111,7 @@ async function getRoute(query){
         // Return the results if the route exists
         return result;
       } else {
-        // Return null (or any other indicator) if the route doesn't exist
+        // Return null if the route doesn't exist
         return null;
       }
     } finally {
@@ -87,14 +120,33 @@ async function getRoute(query){
     }
 }
 
+app.post('/getcentrality', async (req, res) => {
+  const { bounds } = req.body;
+  //console.log(bounds)
+  try {
+    const results = await getCentralityFromNeo4j(bounds);
+    //console.log(results)
+    return res.status(200).json({ message: results });
+  }
+  catch (error) {
+    console.error('Error getting centrality:', error);
+    res.status(500).send('Error getting centrality');
+}
+});
+
 app.post('/getroute', async (req, res) => {
     //const coordinates = req.body;
     console.log('test');
     const { markers } = req.body;
     const results = await Promise.all(markers.map(getNodesFromNeo4j));
+    if (results[0] < 0 || results[1] < 0){
+      return res.status(500).send('Error finding closest node');
+    }else{
+      console.log('passed')
+    }
     console.log(results)
     const Result = markers.reduce((acc, marker, index) => {
-        acc[`node${index + 1}`] = results[index]; // Assuming there is only one node in the result
+        acc[`node${index + 1}`] = results[index]; 
         return acc;
       }, {});
 
@@ -126,7 +178,7 @@ app.post('/getroute', async (req, res) => {
       
               if (result !== null) {
                 console.log('Route found:', result);
-                clearInterval(interval); // Stop the interval when the route is found
+                clearInterval(interval); 
                 return res.status(200).json({ message: result.path });
               } else {
                 console.log('Route does not exist.');
@@ -134,9 +186,9 @@ app.post('/getroute', async (req, res) => {
             } catch (error) {
               console.error('Error:', error);
             }
-          }, 10000); // 10 seconds
+          }, 1000); // 1 second
       
-          // Set up a timer to stop the interval after 10 minutes
+
           setTimeout(() => {
             clearInterval(interval);
           }, 600000); // 10 minutes
@@ -150,17 +202,14 @@ app.post('/getroute', async (req, res) => {
 });
 
 
-// Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Define a route for the homepage
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 connectToKafka();
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });

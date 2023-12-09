@@ -13,12 +13,15 @@ coll = db["paths"]
 
 l = []
 for x in coll.find():
-    l.append((x['x'], x['y'], x['path']))
+    #print(x)
+    l.append((x['node1'], x['node2'], [int(i) for i in x['path']]))
 
-df = spark.createDataFrame(l,schema=["x", "y", "path"])
-window = Window.partitionBy("x","y").orderBy("x","y")
+#print(l)
+df = spark.createDataFrame(l,schema=["node1", "node2", "path"])
+#df.show()
+window = Window.partitionBy("node1","node2").orderBy("node1","node2")
 
-df_edges = df.select("x", "y", explode("path").alias("node"))
+df_edges = df.select("node1","node2", explode("path").alias("node"))
 df_edges = df_edges.withColumn("next_node", lead("node").over(window)).na.drop()
 df_edges = df_edges.withColumn("edge", concat(lit("("), col("node"), lit(","), col("next_node"), lit(")")))
 #df_edges.show()
@@ -32,9 +35,10 @@ df_edge_betweenness = df_edge_counts.withColumn(
     col("count") / lit(total_paths)
 )
 
-#df_edge_betweenness.show()
+df_edge_betweenness.show()
 
 def updateNeo4j(df):
+    from neo4j import GraphDatabase
     driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", "password"))
     
     edge = df.edge.strip('(').strip(')').split(',')
@@ -53,3 +57,5 @@ def updateNeo4j(df):
         result = session.run(query)    
 
 df_edge_betweenness.foreach(updateNeo4j)
+spark.stop()
+# Install neo4j on worker nodes
