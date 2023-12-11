@@ -3,8 +3,9 @@ from pyspark.sql.functions import explode, col, lit, lead, concat
 from pyspark.sql import Window
 import pymongo
 from neo4j import GraphDatabase
+import ast
 
-spark = SparkSession.builder.master('spark://spark-master:7077').getOrCreate()
+spark = SparkSession.builder.master('spark://spark-master:7077').config("spark.cores.max","8").getOrCreate()
 
 # Problems with the mongodb connector.
 client = pymongo.MongoClient("mongodb://root:password@mongodb:27017")
@@ -14,7 +15,10 @@ coll = db["paths"]
 l = []
 for x in coll.find():
     #print(x)
-    l.append((x['node1'], x['node2'], [int(i) for i in x['path']]))
+    try:
+        l.append((int(x['node1']), int(x['node2']), [int(i) for i in ast.literal_eval(x['path'])]))
+    except:
+        l.append((int(x['node1']), int(x['node2']), [int(i) for i in x['path']]))
 
 #print(l)
 df = spark.createDataFrame(l,schema=["node1", "node2", "path"])
